@@ -1,0 +1,30 @@
+{
+  "group_id": "circle-demo-001",
+  "currency": "UGX",
+  "members": [
+    {
+      "id": "m-001",
+      "display_name": "Amina",
+      "aliases": [
+        "Ami"
+      ]
+    },
+    {
+      "id": "m-002",
+      "display_name": "John",
+      "aliases": [
+        "Jon"
+      ]
+    },
+    {
+      "id": "m-003",
+      "display_name": "Mary",
+      "aliases": []
+    },
+    {
+      "id": "m-004",
+      "display_name": "Sarah",
+      "aliases": []
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+node_modules/
+.next/
+.DS_Store
+.vscode/
+.idea/
+*.sqlite3

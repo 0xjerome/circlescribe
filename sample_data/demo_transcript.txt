@@ -1,0 +1,7 @@
+Chair: Welcome everyone. Amina is here, John is here, Mary is here and Sarah is here.
+Amina: I paid fifty thousand for my savings contribution.
+John: I paid thirty thousand.
+Mary: I am repaying forty thousand on my loan.
+Sarah: I would like to request a loan of one hundred thousand for one month.
+John: Actually, correct my contribution. Make that twenty thousand, not thirty.
+Chair: Noted. We will review Sarah's request before approving it.
