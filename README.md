@@ -95,3 +95,13 @@ The frontend expects `http://localhost:8000`; override with `NEXT_PUBLIC_API_URL
 ## License
 
 MIT
+
+## Local full-workflow fallback
+
+If AWS account access is temporarily unavailable, `POST /api/v1/demo/process`
+exercises the full meeting → structured events → deterministic reconciliation →
+draft minutes pipeline using a deliberately narrow deterministic extractor.
+
+This endpoint returns `mode: local-deterministic-fallback` and must **never** be
+presented as Strands or Bedrock inference. The production AI adapter remains
+`POST /api/v1/extract`.

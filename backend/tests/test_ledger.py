@@ -3,16 +3,33 @@ from app.demo import correction_demo_request, demo_group
 from app.ledger import reconcile
 from app.models import EventType, ExtractedEvent, ReconcileRequest
 
+
 class LedgerTests(unittest.TestCase):
-    def test_correction_supersedes_original_amount(self):
+    def test_correction_supersedes_original_amount_and_inherits_type(self):
         report = reconcile(correction_demo_request())
         self.assertEqual(report.status, "reconciled")
         self.assertEqual(report.superseded_event_ids, ["evt-001"])
         self.assertEqual(len(report.entries), 1)
         self.assertEqual(report.entries[0].event_id, "evt-002")
+        self.assertEqual(report.entries[0].event_type, EventType.CONTRIBUTION)
         self.assertEqual(report.entries[0].amount, 20000)
+        self.assertEqual(report.totals_by_type["contribution"], 20000)
 
-    def test_low_confidence_requires_review(self):
+    def test_loan_request_does_not_mutate_ledger(self):
+        req = ReconcileRequest(group=demo_group(), events=[ExtractedEvent(
+            id="evt-loan-request",
+            event_type=EventType.LOAN_REQUEST,
+            member_id="m-004",
+            amount_minor=100000,
+            currency="UGX",
+            confidence=0.99,
+            source_text="Sarah: I would like to request a loan of one hundred thousand.",
+        )])
+        report = reconcile(req)
+        self.assertEqual(report.status, "reconciled")
+        self.assertEqual(report.entries, [])
+
+    def test_low_confidence_requires_human_review(self):
         req = ReconcileRequest(group=demo_group(), events=[ExtractedEvent(id="evt-low", event_type=EventType.CONTRIBUTION, member_id="m-003", amount_minor=50000, currency="UGX", confidence=0.51, source_text="Mary: I think I paid fifty.")])
         report = reconcile(req)
         self.assertEqual(report.status, "needs_review")
@@ -39,5 +56,6 @@ class LedgerTests(unittest.TestCase):
         self.assertEqual(report.entries, [])
         self.assertEqual(report.exceptions[0].code, "currency_mismatch")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
