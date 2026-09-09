@@ -137,3 +137,32 @@ After deterministic reconciliation succeeds, the local workflow now produces:
 
 Final artifacts are deliberately blocked while any human-review item remains unresolved.
 The local demo session can also be retrieved by run id from `GET /api/v1/demo/runs/{run_id}`.
+
+## Local microphone transcription while AWS is suspended
+
+Milestone 5 adds a real browser microphone recorder. For local development on
+Apple Silicon, CircleScribe can transcribe the browser-generated PCM WAV with
+MLX Whisper before sending the reviewed transcript through the existing
+meeting workflow.
+
+This is deliberately labeled a **development fallback**. The final AWS path
+remains Amazon Transcribe + Strands Agents + Bedrock.
+
+Install the optional local audio adapter:
+
+```bash
+cd backend
+source .venv/bin/activate
+uv pip install -e ".[dev,audio]"
+```
+
+The first transcription downloads the configured Whisper model. The default is
+`mlx-community/whisper-tiny`; override it with:
+
+```bash
+export CIRCLESCRIBE_LOCAL_WHISPER_MODEL=mlx-community/whisper-small
+```
+
+Because the browser records 16-bit PCM WAV and the backend passes a NumPy
+waveform directly to MLX Whisper, this development path does not depend on an
+ffmpeg executable.

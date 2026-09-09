@@ -12,11 +12,14 @@ dependencies = [
   "uvicorn[standard]>=0.30",
   "pydantic>=2.8",
   "strands-agents",
-  "boto3>=1.35"
+  "boto3>=1.35",
+  "numpy>=1.26",
+  "python-multipart>=0.0.9"
 ]
 
 [project.optional-dependencies]
 dev = ["httpx>=0.27"]
+audio = ["mlx-whisper"]
 
 [tool.setuptools.packages.find]
 where = ["."]

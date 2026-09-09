@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 type Event = {
   id: string;
@@ -93,6 +93,49 @@ function formatAmount(value: number | null, currency: string | null) {
   return `${value.toLocaleString()} ${currency ?? "UGX"}`;
 }
 
+
+type AudioInfo = {
+  model: string;
+  duration_seconds: number;
+  mode: string;
+  warning: string;
+};
+
+function encodeWav(chunks: Float32Array[], sampleRate: number) {
+  const sampleCount = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const buffer = new ArrayBuffer(44 + sampleCount * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) view.setUint8(offset + i, value.charCodeAt(i));
+  };
+
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + sampleCount * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, sampleCount * 2, true);
+
+  let offset = 44;
+  for (const chunk of chunks) {
+    for (const sample of chunk) {
+      const clamped = Math.max(-1, Math.min(1, sample));
+      view.setInt16(offset, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+      offset += 2;
+    }
+  }
+
+  return buffer;
+}
+
 export default function Home() {
   const [transcript, setTranscript] = useState(CLEAN_TRANSCRIPT);
   const [result, setResult] = useState<ProcessResult | null>(null);
@@ -100,11 +143,97 @@ export default function Home() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolutionAmounts, setResolutionAmounts] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [recordedAudio, setRecordedAudio] = useState<Blob | null>(null);
+  const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const [audioInfo, setAudioInfo] = useState<AudioInfo | null>(null);
+
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Float32Array[]>([]);
+  const audioSampleRateRef = useRef(48_000);
 
   const acceptedTotal = useMemo(
     () => result?.reconciliation.entries.reduce((sum, entry) => sum + entry.amount, 0) ?? 0,
     [result]
   );
+
+  async function startRecording() {
+    setError("");
+    setAudioInfo(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const context = new AudioContext();
+      await context.resume();
+      const source = context.createMediaStreamSource(stream);
+      const processor = context.createScriptProcessor(4096, 1, 1);
+      audioChunksRef.current = [];
+      audioSampleRateRef.current = context.sampleRate;
+
+      processor.onaudioprocess = (event) => {
+        audioChunksRef.current.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+      };
+
+      source.connect(processor);
+      processor.connect(context.destination);
+
+      streamRef.current = stream;
+      audioContextRef.current = context;
+      sourceRef.current = source;
+      processorRef.current = processor;
+      setRecording(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Microphone access failed");
+    }
+  }
+
+  async function stopRecording() {
+    if (!recording) return;
+
+    processorRef.current?.disconnect();
+    sourceRef.current?.disconnect();
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    await audioContextRef.current?.close();
+
+    const wav = encodeWav(audioChunksRef.current, audioSampleRateRef.current);
+    const blob = new Blob([wav], { type: "audio/wav" });
+    if (recordedAudioUrl) URL.revokeObjectURL(recordedAudioUrl);
+    const url = URL.createObjectURL(blob);
+
+    setRecordedAudio(blob);
+    setRecordedAudioUrl(url);
+    setRecording(false);
+    processorRef.current = null;
+    sourceRef.current = null;
+    streamRef.current = null;
+    audioContextRef.current = null;
+  }
+
+  async function transcribeRecording() {
+    if (!recordedAudio) return;
+    setTranscribing(true);
+    setError("");
+    setAudioInfo(null);
+    try {
+      const form = new FormData();
+      form.append("audio", recordedAudio, "circlescribe-meeting.wav");
+      const response = await fetch(`${API}/api/v1/demo/audio/transcribe`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? `API returned ${response.status}`);
+      setTranscript(data.transcript);
+      setAudioInfo(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to transcribe recording");
+    } finally {
+      setTranscribing(false);
+    }
+  }
 
   async function processMeeting() {
     setLoading(true);
@@ -213,7 +342,7 @@ export default function Home() {
           <div className="sectionHead">
             <div>
               <span className="step">Step 1</span>
-              <h2>Meeting transcript</h2>
+              <h2>Capture meeting</h2>
             </div>
             <div className="presets">
               <button className="ghost" onClick={() => setTranscript(CLEAN_TRANSCRIPT)}>
@@ -224,6 +353,43 @@ export default function Home() {
               </button>
             </div>
           </div>
+          <div className="audioCapture">
+            <div className="audioCaptureHead">
+              <div>
+                <strong>Meeting audio</strong>
+                <span>Record a real meeting, transcribe locally, then review the text before processing. For this guided local demo, say each speaker name before their turn.</span>
+              </div>
+              <span className="audioMode">local dev</span>
+            </div>
+            <div className="audioActions">
+              {!recording ? (
+                <button className="ghost" onClick={startRecording}>Start recording</button>
+              ) : (
+                <button className="primary recordStop" onClick={stopRecording}>Stop recording</button>
+              )}
+              <button
+                className="ghost"
+                onClick={transcribeRecording}
+                disabled={!recordedAudio || recording || transcribing}
+              >
+                {transcribing ? "Transcribing…" : "Transcribe recording"}
+              </button>
+            </div>
+            {recording && <div className="recordingLive"><span /> Recording microphone…</div>}
+            {recordedAudioUrl && <audio className="audioPlayer" src={recordedAudioUrl} controls />}
+            {audioInfo && (
+              <div className="audioResult">
+                <strong>Transcript ready</strong>
+                <span>{audioInfo.duration_seconds.toFixed(1)}s · {audioInfo.model} · {audioInfo.mode}</span>
+                <small>Review the transcript below before clicking Process meeting.</small>
+              </div>
+            )}
+          </div>
+
+          <label className="transcriptLabel">
+            Reviewed transcript
+            <span>Speaker labels are still important for the local deterministic extractor.</span>
+          </label>
           <textarea value={transcript} onChange={(e) => setTranscript(e.target.value)} />
           <button className="primary" onClick={processMeeting} disabled={loading || !transcript.trim()}>
             {loading ? "Processing meeting…" : "Process meeting"}

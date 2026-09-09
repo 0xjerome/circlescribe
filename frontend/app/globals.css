@@ -282,3 +282,71 @@ pre {
   .auditRow { grid-template-columns: 34px minmax(0, 1fr); }
   .auditActor { grid-column: 2; justify-self: start; }
 }
+
+.audioCapture {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid #c9c9c1;
+  border-radius: 14px;
+  background: #fafaf6;
+}
+.audioCaptureHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+.audioCaptureHead strong { display: block; font-size: 16px; }
+.audioCaptureHead span { display: block; margin-top: 4px; color: #65655e; font-size: 13px; }
+.audioMode {
+  margin: 0 !important;
+  padding: 6px 9px;
+  border: 1px solid #bdbdb5;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 10px !important;
+  font-weight: 850;
+  color: #42423e !important;
+  white-space: nowrap;
+}
+.audioActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 15px; }
+.recordStop { background: #6b1e1e; }
+.recordingLive {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 750;
+}
+.recordingLive span {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #8d2020;
+  box-shadow: 0 0 0 5px rgba(141, 32, 32, .12);
+}
+.audioPlayer { width: 100%; margin-top: 14px; }
+.audioResult {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #deded6;
+  border-radius: 10px;
+}
+.audioResult span, .audioResult small { color: #686861; }
+.transcriptLabel {
+  display: grid;
+  gap: 4px;
+  margin: 18px 0 7px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.transcriptLabel span { color: #707069; font-weight: 500; font-size: 12px; }
+
+@media (max-width: 650px) {
+  .audioCaptureHead { flex-direction: column; }
+}

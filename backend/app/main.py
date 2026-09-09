@@ -3,11 +3,12 @@ from __future__ import annotations
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .agent import extract_events
+from .audio import LocalTranscriptionUnavailable, UnsupportedAudioError, transcribe_wav_bytes
 from .artifacts import AuditRecord, FollowUpAction, Receipt, generate_completion_artifacts
 from .demo import correction_demo_request
 from .ledger import reconcile
@@ -20,7 +21,7 @@ from .workflow import (
     resolve_demo_event,
 )
 
-app = FastAPI(title="CircleScribe API", version="0.4.0")
+app = FastAPI(title="CircleScribe API", version="0.5.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -46,6 +47,19 @@ class DemoProcessResponse(BaseModel):
     receipts: list[Receipt]
     follow_up_actions: list[FollowUpAction]
     audit_log: list[AuditRecord]
+
+
+
+
+class LocalAudioTranscriptionResponse(BaseModel):
+    transcript: str
+    mode: Literal["local-mlx-whisper"] = "local-mlx-whisper"
+    model: str
+    duration_seconds: float
+    warning: str = (
+        "Development fallback only. Final hackathon inference uses AWS Strands Agents "
+        "and Amazon Transcribe/Bedrock once AWS account access is restored."
+    )
 
 
 class HumanResolutionRequest(BaseModel):
@@ -105,6 +119,33 @@ def extract(request: TranscriptRequest) -> MeetingExtraction:
             status_code=502,
             detail="Agent extraction failed. Check AWS credentials, model access, and server logs.",
         ) from exc
+
+
+@app.post("/api/v1/demo/audio/transcribe", response_model=LocalAudioTranscriptionResponse)
+async def demo_audio_transcribe(audio: UploadFile = File(...)) -> LocalAudioTranscriptionResponse:
+    """Transcribe a real microphone recording locally on Apple Silicon.
+
+    This endpoint is a development fallback and is intentionally separate from
+    the production Amazon Transcribe path described in the submission architecture.
+    """
+    data = await audio.read()
+    if len(data) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio file exceeds the 25 MB local demo limit.")
+
+    try:
+        transcript, model, duration = transcribe_wav_bytes(data)
+    except UnsupportedAudioError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except LocalTranscriptionUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Local transcription failed. Check backend logs.") from exc
+
+    return LocalAudioTranscriptionResponse(
+        transcript=transcript,
+        model=model,
+        duration_seconds=round(duration, 2),
+    )
 
 
 @app.post("/api/v1/reconcile", response_model=ReconcileReport)
