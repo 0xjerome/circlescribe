@@ -129,6 +129,22 @@ def extract_locally(transcript: str) -> MeetingExtraction:
                     ))
             continue
 
+        # The chair often repeats or questions a member's statement. Those
+        # prompts are context, not member financial events. Preserve explicit
+        # chair decisions below, but never infer a contribution merely because
+        # the chair says words like "confirm your contribution".
+        if speaker.lower() == "chair":
+            if "review" in lower or "approved" in lower or "decision" in lower:
+                events.append(ExtractedEvent(
+                    id=f"evt-{next(event_ids):03d}",
+                    event_type=EventType.DECISION,
+                    member_id=None,
+                    confidence=0.95,
+                    source_text=line,
+                    note=body,
+                ))
+            continue
+
         amount = _words_to_number(body)
 
         if "not sure" in lower or "unclear" in lower or "maybe" in lower:

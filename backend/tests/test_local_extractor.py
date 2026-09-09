@@ -39,6 +39,16 @@ class LocalExtractorTests(unittest.TestCase):
         self.assertEqual(report.status, "needs_review")
         self.assertEqual(report.exceptions[0].code, "low_confidence")
 
+    def test_chair_question_is_not_extracted_as_member_contribution(self):
+        extraction = extract_locally(
+            "Chair: Mary, can you confirm your contribution?\n"
+            "Mary: Maybe I paid fifty thousand, I am not sure."
+        )
+        self.assertEqual(len(extraction.events), 1)
+        self.assertEqual(extraction.events[0].member_id, "m-003")
+        self.assertEqual(extraction.events[0].amount_minor, 50000)
+
+
 
 if __name__ == "__main__":
     unittest.main()

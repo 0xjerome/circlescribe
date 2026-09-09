@@ -165,3 +165,43 @@ pre {
   .sectionHead { flex-direction: column; }
   .presets { justify-content: flex-start; }
 }
+
+.resumeBanner {
+  margin-top: 22px;
+  padding: 18px 20px;
+  background: #171717;
+  color: white;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.resumeBanner strong { display: block; margin-top: 5px; font-size: 17px; }
+.resumeBanner > span { font-size: 13px; white-space: nowrap; }
+
+.resolutionForm {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #d9d9d1;
+}
+.resolutionForm label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 750;
+}
+.resolutionForm input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #bdbdb5;
+  border-radius: 9px;
+  background: white;
+  font: inherit;
+}
+.resolutionActions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.danger { color: #5e1b1b; border-color: #b68b8b; }
+
+@media (max-width: 650px) {
+  .resumeBanner { align-items: flex-start; flex-direction: column; }
+}

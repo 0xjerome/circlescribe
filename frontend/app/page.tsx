@@ -14,7 +14,15 @@ type Event = {
   note: string | null;
 };
 
+type ExceptionItem = {
+  event_id: string;
+  code: string;
+  message: string;
+  source_text: string;
+};
+
 type ProcessResult = {
+  run_id: string;
   mode: string;
   extraction: {
     meeting_summary: string;
@@ -30,16 +38,13 @@ type ProcessResult = {
       currency: string;
       source_text: string;
     }>;
-    exceptions: Array<{
-      event_id: string;
-      code: string;
-      message: string;
-      source_text: string;
-    }>;
+    exceptions: ExceptionItem[];
     superseded_event_ids: string[];
     totals_by_type: Record<string, number>;
   };
   generated_minutes: string;
+  resolved_event_ids: string[];
+  discarded_event_ids: string[];
 };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -65,6 +70,8 @@ export default function Home() {
   const [transcript, setTranscript] = useState(CLEAN_TRANSCRIPT);
   const [result, setResult] = useState<ProcessResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolutionAmounts, setResolutionAmounts] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
 
   const acceptedTotal = useMemo(
@@ -76,6 +83,7 @@ export default function Home() {
     setLoading(true);
     setError("");
     setResult(null);
+    setResolutionAmounts({});
     try {
       const response = await fetch(`${API}/api/v1/demo/process`, {
         method: "POST",
@@ -89,6 +97,53 @@ export default function Home() {
       setError(err instanceof Error ? err.message : "Unable to process meeting");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function eventForException(item: ExceptionItem) {
+    return result?.extraction.events.find((event) => event.id === item.event_id) ?? null;
+  }
+
+  function amountForResolution(item: ExceptionItem) {
+    const explicit = resolutionAmounts[item.event_id];
+    if (explicit != null && explicit.trim() !== "") return Number(explicit);
+    return eventForException(item)?.amount_minor ?? null;
+  }
+
+  async function resolveException(item: ExceptionItem, action: "confirm" | "discard") {
+    if (!result) return;
+
+    const amount = amountForResolution(item);
+    if (action === "confirm" && (amount == null || !Number.isFinite(amount) || amount <= 0)) {
+      setError("Enter a positive amount before confirming this financial event.");
+      return;
+    }
+
+    setResolvingId(item.event_id);
+    setError("");
+    try {
+      const response = await fetch(`${API}/api/v1/demo/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          run_id: result.run_id,
+          event_id: item.event_id,
+          action,
+          amount_minor: action === "confirm" ? amount : null,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? `API returned ${response.status}`);
+      setResult(data);
+      setResolutionAmounts((current) => {
+        const next = { ...current };
+        delete next[item.event_id];
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to resolve review item");
+    } finally {
+      setResolvingId(null);
     }
   }
 
@@ -144,8 +199,9 @@ export default function Home() {
             <li>Extract typed meeting events</li>
             <li>Resolve explicit corrections</li>
             <li>Validate ledger mutations</li>
-            <li>Escalate genuine uncertainty</li>
-            <li>Generate draft minutes</li>
+            <li>Pause only genuine uncertainty</li>
+            <li>Human resolves one exception</li>
+            <li>Resume and finish the workflow</li>
           </ol>
         </aside>
       </section>
@@ -154,6 +210,16 @@ export default function Home() {
 
       {result && (
         <>
+          {result.resolved_event_ids.length > 0 && result.reconciliation.status === "reconciled" && (
+            <section className="resumeBanner">
+              <div>
+                <span className="step">Workflow resumed</span>
+                <strong>Human decision accepted. All deterministic checks now pass.</strong>
+              </div>
+              <span>{result.resolved_event_ids.length} exception resolved</span>
+            </section>
+          )}
+
           <section className="metrics">
             <div className="metric">
               <span>Status</span>
@@ -196,9 +262,9 @@ export default function Home() {
                     <div className="eventMeta">
                       <span>{formatAmount(event.amount_minor, event.currency)}</span>
                       <span>{Math.round(event.confidence * 100)}% confidence</span>
-                      {event.supersedes_event_id && (
-                        <span>replaces {event.supersedes_event_id}</span>
-                      )}
+                      {event.supersedes_event_id && <span>replaces {event.supersedes_event_id}</span>}
+                      {result.resolved_event_ids.includes(event.id) && <span>human resolved ✓</span>}
+                      {result.discarded_event_ids.includes(event.id) && <span>discarded ✓</span>}
                     </div>
                   </div>
                 ))}
@@ -227,21 +293,60 @@ export default function Home() {
               <span className="step">Step 4</span>
               <h2>Human decisions</h2>
               {result.reconciliation.exceptions.length === 0 ? (
-                <div className="successBox">No human review is required.</div>
+                <div className="successBox">
+                  {result.resolved_event_ids.length > 0
+                    ? "All review items are resolved. The workflow completed."
+                    : "No human review is required."}
+                </div>
               ) : (
-                result.reconciliation.exceptions.map((item) => (
-                  <div className="reviewBox" key={`${item.event_id}-${item.code}`}>
-                    <strong>{item.code.replaceAll("_", " ")}</strong>
-                    <p>{item.message}</p>
-                    <small>{item.source_text}</small>
-                  </div>
-                ))
+                result.reconciliation.exceptions.map((item) => {
+                  const event = eventForException(item);
+                  return (
+                    <div className="reviewBox" key={`${item.event_id}-${item.code}`}>
+                      <strong>{item.code.replaceAll("_", " ")}</strong>
+                      <p>{item.message}</p>
+                      <small>{item.source_text}</small>
+                      <div className="resolutionForm">
+                        <label>
+                          Confirmed amount (UGX)
+                          <input
+                            type="number"
+                            min="1"
+                            value={resolutionAmounts[item.event_id] ?? (event?.amount_minor?.toString() ?? "")}
+                            onChange={(e) =>
+                              setResolutionAmounts((current) => ({
+                                ...current,
+                                [item.event_id]: e.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                        <div className="resolutionActions">
+                          <button
+                            className="primary"
+                            disabled={resolvingId === item.event_id}
+                            onClick={() => resolveException(item, "confirm")}
+                          >
+                            {resolvingId === item.event_id ? "Resuming…" : "Confirm & resume"}
+                          </button>
+                          <button
+                            className="ghost danger"
+                            disabled={resolvingId === item.event_id}
+                            onClick={() => resolveException(item, "discard")}
+                          >
+                            Discard event
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
 
             <div className="card wide">
               <span className="step">Step 5</span>
-              <h2>Draft meeting minutes</h2>
+              <h2>{result.reconciliation.status === "reconciled" ? "Completed meeting minutes" : "Draft meeting minutes"}</h2>
               <pre>{result.generated_minutes}</pre>
             </div>
           </section>

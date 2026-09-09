@@ -50,6 +50,26 @@ Amazon S3 -> Amazon Transcribe
                          resume workflow
 ```
 
+
+### Human-in-the-loop workflow resume
+
+The local development workflow now supports a complete exception cycle:
+
+```text
+ambiguous event
+    ↓
+deterministic validator blocks ledger mutation
+    ↓
+human confirms / replaces the amount OR discards the event
+    ↓
+same validator runs again
+    ↓
+workflow resumes only if all invariants pass
+```
+
+Human review never bypasses deterministic validation. The local demo keeps run
+state in memory; the production AWS deployment will persist workflow state.
+
 ## Backend quickstart
 
 Requirements: Python 3.10+ and AWS credentials with Bedrock model access for AI extraction.
