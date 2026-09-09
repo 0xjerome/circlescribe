@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .agent import extract_events
+from .artifacts import AuditRecord, FollowUpAction, Receipt, generate_completion_artifacts
 from .demo import correction_demo_request
 from .ledger import reconcile
 from .models import MeetingExtraction, ReconcileReport, ReconcileRequest
@@ -19,7 +20,7 @@ from .workflow import (
     resolve_demo_event,
 )
 
-app = FastAPI(title="CircleScribe API", version="0.3.0")
+app = FastAPI(title="CircleScribe API", version="0.4.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -41,6 +42,10 @@ class DemoProcessResponse(BaseModel):
     generated_minutes: str
     resolved_event_ids: list[str]
     discarded_event_ids: list[str]
+    artifacts_finalized: bool
+    receipts: list[Receipt]
+    follow_up_actions: list[FollowUpAction]
+    audit_log: list[AuditRecord]
 
 
 class HumanResolutionRequest(BaseModel):
@@ -59,6 +64,7 @@ _MAX_DEMO_RUNS = 100
 
 def _demo_response(run_id: str, state: DemoRunState) -> DemoProcessResponse:
     report = reconcile_demo_run(state)
+    artifacts = generate_completion_artifacts(state, report)
     return DemoProcessResponse(
         run_id=run_id,
         mode="local-deterministic-fallback",
@@ -67,6 +73,10 @@ def _demo_response(run_id: str, state: DemoRunState) -> DemoProcessResponse:
         generated_minutes=generate_demo_minutes(state, report),
         resolved_event_ids=sorted(state.resolved_event_ids),
         discarded_event_ids=sorted(state.discarded_event_ids),
+        artifacts_finalized=artifacts.finalized,
+        receipts=artifacts.receipts,
+        follow_up_actions=artifacts.follow_up_actions,
+        audit_log=artifacts.audit_log,
     )
 
 
@@ -143,3 +153,12 @@ def demo_resolve(request: HumanResolutionRequest) -> DemoProcessResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return _demo_response(request.run_id, state)
+
+
+@app.get("/api/v1/demo/runs/{run_id}", response_model=DemoProcessResponse)
+def demo_get_run(run_id: str) -> DemoProcessResponse:
+    """Retrieve an in-memory local demo session by id."""
+    state = _demo_runs.get(run_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Demo run not found or expired.")
+    return _demo_response(run_id, state)

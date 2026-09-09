@@ -205,3 +205,80 @@ pre {
 @media (max-width: 650px) {
   .resumeBanner { align-items: flex-start; flex-direction: column; }
 }
+
+.finalBadge, .blockedBadge {
+  border-radius: 999px;
+  padding: 8px 11px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.finalBadge { background: #171717; color: white; }
+.blockedBadge { border: 1px solid #b68b8b; color: #5e1b1b; }
+
+.lockedOutput {
+  margin-top: 8px;
+  padding: 18px;
+  border: 1px dashed #aaa99f;
+  border-radius: 12px;
+  color: #5d5d56;
+  background: #fafaf6;
+}
+
+.outputsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 8px;
+}
+.outputsGrid h3 { margin: 4px 0 10px; }
+.receiptRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e3e3db;
+}
+.receiptRow small { display: block; color: #77776f; margin-top: 4px; }
+.actionRow {
+  display: grid;
+  gap: 4px;
+  padding: 13px 0;
+  border-bottom: 1px solid #e3e3db;
+}
+.actionRow span, .actionRow small { color: #6a6a63; }
+
+.auditList { border-top: 1px solid #ddddD5; margin-top: 8px; }
+.auditRow {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 100px;
+  gap: 14px;
+  align-items: start;
+  padding: 14px 0;
+  border-bottom: 1px solid #e4e4dd;
+}
+.auditRow p { margin: 4px 0 0; color: #62625c; }
+.auditSeq {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #bdbdb5;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+}
+.auditActor {
+  justify-self: end;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 10px;
+  font-weight: 850;
+  color: #67675f;
+}
+
+@media (max-width: 760px) {
+  .outputsGrid { grid-template-columns: 1fr; }
+  .auditRow { grid-template-columns: 34px minmax(0, 1fr); }
+  .auditActor { grid-column: 2; justify-self: start; }
+}

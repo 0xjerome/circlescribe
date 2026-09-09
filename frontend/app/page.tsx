@@ -45,6 +45,33 @@ type ProcessResult = {
   generated_minutes: string;
   resolved_event_ids: string[];
   discarded_event_ids: string[];
+  artifacts_finalized: boolean;
+  receipts: Array<{
+    id: string;
+    event_id: string;
+    member_id: string | null;
+    member_name: string;
+    event_type: string;
+    amount: number;
+    currency: string;
+    status: "final";
+  }>;
+  follow_up_actions: Array<{
+    id: string;
+    event_id: string;
+    title: string;
+    owner: string;
+    amount: number | null;
+    currency: string | null;
+    status: "open";
+  }>;
+  audit_log: Array<{
+    sequence: number;
+    actor: "extractor" | "validator" | "human" | "system";
+    stage: string;
+    detail: string;
+    event_id: string | null;
+  }>;
 };
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -108,6 +135,16 @@ export default function Home() {
     const explicit = resolutionAmounts[item.event_id];
     if (explicit != null && explicit.trim() !== "") return Number(explicit);
     return eventForException(item)?.amount_minor ?? null;
+  }
+
+  function downloadText(filename: string, content: string, type = "text/plain") {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   async function resolveException(item: ExceptionItem, action: "confirm" | "discard") {
@@ -201,7 +238,7 @@ export default function Home() {
             <li>Validate ledger mutations</li>
             <li>Pause only genuine uncertainty</li>
             <li>Human resolves one exception</li>
-            <li>Resume and finish the workflow</li>
+            <li>Resume, finalize receipts and create follow-ups</li>
           </ol>
         </aside>
       </section>
@@ -345,9 +382,103 @@ export default function Home() {
             </div>
 
             <div className="card wide">
-              <span className="step">Step 5</span>
-              <h2>{result.reconciliation.status === "reconciled" ? "Completed meeting minutes" : "Draft meeting minutes"}</h2>
+              <div className="sectionHead">
+                <div>
+                  <span className="step">Step 5</span>
+                  <h2>{result.reconciliation.status === "reconciled" ? "Completed meeting minutes" : "Draft meeting minutes"}</h2>
+                </div>
+                <button
+                  className="ghost"
+                  onClick={() => downloadText(`circlescribe-${result.run_id}-minutes.txt`, result.generated_minutes)}
+                >
+                  Download minutes
+                </button>
+              </div>
               <pre>{result.generated_minutes}</pre>
+            </div>
+
+            <div className="card wide">
+              <div className="sectionHead">
+                <div>
+                  <span className="step">Step 6</span>
+                  <h2>Completed work</h2>
+                </div>
+                <span className={result.artifacts_finalized ? "finalBadge" : "blockedBadge"}>
+                  {result.artifacts_finalized ? "finalized" : "blocked pending review"}
+                </span>
+              </div>
+
+              {!result.artifacts_finalized ? (
+                <div className="lockedOutput">
+                  Final receipts and follow-up actions are intentionally blocked until every review item passes the deterministic validator.
+                </div>
+              ) : (
+                <div className="outputsGrid">
+                  <div>
+                    <h3>Member receipts</h3>
+                    {result.receipts.length === 0 ? (
+                      <p className="muted">No financial receipts were generated.</p>
+                    ) : (
+                      result.receipts.map((receipt) => (
+                        <div className="receiptRow" key={receipt.id}>
+                          <div>
+                            <strong>{receipt.member_name}</strong>
+                            <small>{receipt.event_type.replaceAll("_", " ")} · {receipt.id}</small>
+                          </div>
+                          <strong>{receipt.amount.toLocaleString()} {receipt.currency}</strong>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div>
+                    <h3>Follow-up actions</h3>
+                    {result.follow_up_actions.length === 0 ? (
+                      <p className="muted">No follow-up actions were created.</p>
+                    ) : (
+                      result.follow_up_actions.map((action) => (
+                        <div className="actionRow" key={action.id}>
+                          <strong>{action.title}</strong>
+                          <span>{action.owner}</span>
+                          {action.amount != null && (
+                            <small>{action.amount.toLocaleString()} {action.currency ?? "UGX"}</small>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="card wide">
+              <div className="sectionHead">
+                <div>
+                  <span className="step">Step 7</span>
+                  <h2>Audit trail</h2>
+                </div>
+                <button
+                  className="ghost"
+                  onClick={() => downloadText(
+                    `circlescribe-${result.run_id}-audit.json`,
+                    JSON.stringify(result.audit_log, null, 2),
+                    "application/json"
+                  )}
+                >
+                  Export audit JSON
+                </button>
+              </div>
+              <div className="auditList">
+                {result.audit_log.map((record) => (
+                  <div className="auditRow" key={`${record.sequence}-${record.stage}-${record.event_id ?? "none"}`}>
+                    <span className="auditSeq">{record.sequence}</span>
+                    <div>
+                      <strong>{record.stage.replaceAll("_", " ")}</strong>
+                      <p>{record.detail}</p>
+                    </div>
+                    <span className="auditActor">{record.actor}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         </>

@@ -125,3 +125,15 @@ draft minutes pipeline using a deliberately narrow deterministic extractor.
 This endpoint returns `mode: local-deterministic-fallback` and must **never** be
 presented as Strands or Bedrock inference. The production AI adapter remains
 `POST /api/v1/extract`.
+
+## Milestone 4 — completed-work artifacts
+
+After deterministic reconciliation succeeds, the local workflow now produces:
+
+- final per-member receipts for accepted ledger mutations
+- operational follow-up actions such as reviewing a loan request
+- an ordered audit trail showing extraction, validation, corrections, human resolutions, and output finalization
+- downloadable meeting minutes and audit JSON in the UI
+
+Final artifacts are deliberately blocked while any human-review item remains unresolved.
+The local demo session can also be retrieved by run id from `GET /api/v1/demo/runs/{run_id}`.

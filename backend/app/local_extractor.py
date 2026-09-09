@@ -61,6 +61,11 @@ def _words_to_number(text: str) -> int | None:
         text = text[lowered.index("make that") + len("make that"):]
         text = re.split(r"[,;]|\bnot\b", text, maxsplit=1, flags=re.IGNORECASE)[0]
 
+    # Amount phrases often continue with a duration or purpose, e.g.
+    # "one hundred thousand for one month". Stop parsing at those semantic
+    # boundaries so duration numbers cannot leak into the money amount.
+    text = re.split(r"\b(?:for|until|by)\b", text, maxsplit=1, flags=re.IGNORECASE)[0]
+
     numeric = re.search(r"\b([0-9][0-9,]*)\b", text)
     if numeric:
         return int(numeric.group(1).replace(",", ""))

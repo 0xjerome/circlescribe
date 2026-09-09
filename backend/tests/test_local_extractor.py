@@ -49,6 +49,14 @@ class LocalExtractorTests(unittest.TestCase):
         self.assertEqual(extraction.events[0].amount_minor, 50000)
 
 
+    def test_loan_duration_does_not_change_requested_amount(self):
+        extraction = extract_locally(
+            "Sarah: I would like to request a loan of one hundred thousand for one month."
+        )
+        self.assertEqual(len(extraction.events), 1)
+        self.assertEqual(extraction.events[0].event_type, EventType.LOAN_REQUEST)
+        self.assertEqual(extraction.events[0].amount_minor, 100000)
+
 
 if __name__ == "__main__":
     unittest.main()
