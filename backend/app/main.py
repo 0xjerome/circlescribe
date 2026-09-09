@@ -7,7 +7,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from .agent import extract_events
+from .agent import extract_events, get_aws_readiness
 from .audio import LocalTranscriptionUnavailable, UnsupportedAudioError, transcribe_wav_bytes
 from .artifacts import AuditRecord, FollowUpAction, Receipt, generate_completion_artifacts
 from .demo import correction_demo_request
@@ -22,7 +22,7 @@ from .workflow import (
     resolve_demo_event,
 )
 
-app = FastAPI(title="CircleScribe API", version="0.6.0")
+app = FastAPI(title="CircleScribe API", version="0.8.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -118,6 +118,12 @@ def _load_demo_run(run_id: str) -> DemoRunState | None:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "service": "circlescribe-api"}
+
+
+@app.get("/api/v1/aws/readiness")
+def aws_readiness() -> dict:
+    """Report production AWS adapter configuration without making a network call."""
+    return get_aws_readiness()
 
 
 @app.post("/api/v1/extract", response_model=MeetingExtraction)
