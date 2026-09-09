@@ -166,3 +166,22 @@ export CIRCLESCRIBE_LOCAL_WHISPER_MODEL=mlx-community/whisper-small
 Because the browser records 16-bit PCM WAV and the backend passes a NumPy
 waveform directly to MLX Whisper, this development path does not depend on an
 ffmpeg executable.
+
+## Milestone 6 — durable local meeting history
+
+Local development workflow state is now persisted in SQLite instead of an
+in-memory dictionary. This means review decisions and finalized meetings
+survive backend restarts and can be reopened from the Recent meetings panel.
+
+The default database is `backend/.circlescribe/runs.sqlite3` and is git-ignored.
+Override it for tests or alternate local environments with:
+
+```bash
+export CIRCLESCRIBE_RUN_DB=/path/to/runs.sqlite3
+```
+
+This is still a clearly labeled local-development adapter. The production AWS
+deployment will move the same durable workflow-state boundary to DynamoDB.
+Finalized sessions can also export a judge-friendly evidence bundle containing
+structured extraction, deterministic reconciliation, receipts, follow-ups,
+minutes, and the audit trail.

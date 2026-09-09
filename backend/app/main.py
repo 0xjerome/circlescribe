@@ -13,6 +13,7 @@ from .artifacts import AuditRecord, FollowUpAction, Receipt, generate_completion
 from .demo import correction_demo_request
 from .ledger import reconcile
 from .models import MeetingExtraction, ReconcileReport, ReconcileRequest
+from .store import LocalRunStore
 from .workflow import (
     DemoRunState,
     create_demo_run,
@@ -21,7 +22,7 @@ from .workflow import (
     resolve_demo_event,
 )
 
-app = FastAPI(title="CircleScribe API", version="0.5.0")
+app = FastAPI(title="CircleScribe API", version="0.6.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -51,6 +52,17 @@ class DemoProcessResponse(BaseModel):
 
 
 
+class DemoRunSummary(BaseModel):
+    run_id: str
+    created_at: str
+    updated_at: str
+    meeting_summary: str
+    status: Literal["reconciled", "needs_review"]
+    review_items: int
+    ledger_entries: int
+    artifacts_finalized: bool
+
+
 class LocalAudioTranscriptionResponse(BaseModel):
     transcript: str
     mode: Literal["local-mlx-whisper"] = "local-mlx-whisper"
@@ -70,10 +82,10 @@ class HumanResolutionRequest(BaseModel):
     member_id: str | None = None
 
 
-# In-memory state is intentionally limited to the local-development demo. The
-# production AWS deployment will persist workflow state outside the web process.
-_demo_runs: dict[str, DemoRunState] = {}
-_MAX_DEMO_RUNS = 100
+# Local SQLite persistence keeps demo workflow state durable across backend
+# restarts. The AWS deployment will replace this adapter with DynamoDB while
+# preserving the same workflow-state boundary.
+_demo_store = LocalRunStore.from_env()
 
 
 def _demo_response(run_id: str, state: DemoRunState) -> DemoProcessResponse:
@@ -95,11 +107,12 @@ def _demo_response(run_id: str, state: DemoRunState) -> DemoProcessResponse:
 
 
 def _store_demo_run(run_id: str, state: DemoRunState) -> None:
-    # Keep this bounded during local testing. This is not production persistence.
-    if len(_demo_runs) >= _MAX_DEMO_RUNS:
-        oldest = next(iter(_demo_runs))
-        _demo_runs.pop(oldest, None)
-    _demo_runs[run_id] = state
+    _demo_store.save(run_id, state)
+
+
+def _load_demo_run(run_id: str) -> DemoRunState | None:
+    record = _demo_store.get(run_id)
+    return record.state if record is not None else None
 
 
 @app.get("/health")
@@ -178,7 +191,7 @@ def demo_process(request: TranscriptRequest) -> DemoProcessResponse:
 @app.post("/api/v1/demo/resolve", response_model=DemoProcessResponse)
 def demo_resolve(request: HumanResolutionRequest) -> DemoProcessResponse:
     """Apply one human decision and resume the deterministic workflow."""
-    state = _demo_runs.get(request.run_id)
+    state = _load_demo_run(request.run_id)
     if state is None:
         raise HTTPException(status_code=404, detail="Demo run not found or expired.")
 
@@ -193,13 +206,37 @@ def demo_resolve(request: HumanResolutionRequest) -> DemoProcessResponse:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    _store_demo_run(request.run_id, state)
     return _demo_response(request.run_id, state)
+
+
+@app.get("/api/v1/demo/runs", response_model=list[DemoRunSummary])
+def demo_list_runs(limit: int = 10) -> list[DemoRunSummary]:
+    """List durable local demo sessions, most recently updated first."""
+    if limit < 1 or limit > 50:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 50.")
+
+    summaries: list[DemoRunSummary] = []
+    for record in _demo_store.list_runs(limit=limit):
+        report = reconcile_demo_run(record.state)
+        artifacts = generate_completion_artifacts(record.state, report)
+        summaries.append(DemoRunSummary(
+            run_id=record.run_id,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            meeting_summary=record.state.extraction.meeting_summary,
+            status=report.status,
+            review_items=len(report.exceptions),
+            ledger_entries=len(report.entries),
+            artifacts_finalized=artifacts.finalized,
+        ))
+    return summaries
 
 
 @app.get("/api/v1/demo/runs/{run_id}", response_model=DemoProcessResponse)
 def demo_get_run(run_id: str) -> DemoProcessResponse:
-    """Retrieve an in-memory local demo session by id."""
-    state = _demo_runs.get(run_id)
+    """Retrieve a durable local demo session by id."""
+    state = _load_demo_run(run_id)
     if state is None:
-        raise HTTPException(status_code=404, detail="Demo run not found or expired.")
+        raise HTTPException(status_code=404, detail="Demo run not found.")
     return _demo_response(run_id, state)

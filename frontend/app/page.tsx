@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Event = {
   id: string;
@@ -94,6 +94,18 @@ function formatAmount(value: number | null, currency: string | null) {
 }
 
 
+
+type RecentRun = {
+  run_id: string;
+  created_at: string;
+  updated_at: string;
+  meeting_summary: string;
+  status: "reconciled" | "needs_review";
+  review_items: number;
+  ledger_entries: number;
+  artifacts_finalized: boolean;
+};
+
 type AudioInfo = {
   model: string;
   duration_seconds: number;
@@ -148,6 +160,9 @@ export default function Home() {
   const [recordedAudioUrl, setRecordedAudioUrl] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [audioInfo, setAudioInfo] = useState<AudioInfo | null>(null);
+  const [recentRuns, setRecentRuns] = useState<RecentRun[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [openingRunId, setOpeningRunId] = useState<string | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
@@ -160,6 +175,41 @@ export default function Home() {
     () => result?.reconciliation.entries.reduce((sum, entry) => sum + entry.amount, 0) ?? 0,
     [result]
   );
+
+  async function loadRecentRuns() {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch(`${API}/api/v1/demo/runs?limit=8`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? `API returned ${response.status}`);
+      setRecentRuns(data);
+    } catch {
+      // History is helpful for the demo but should not block the core workflow.
+      setRecentRuns([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadRecentRuns();
+  }, []);
+
+  async function openRecentRun(runId: string) {
+    setOpeningRunId(runId);
+    setError("");
+    try {
+      const response = await fetch(`${API}/api/v1/demo/runs/${runId}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? `API returned ${response.status}`);
+      setResult(data);
+      setResolutionAmounts({});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to reopen meeting");
+    } finally {
+      setOpeningRunId(null);
+    }
+  }
 
   async function startRecording() {
     setError("");
@@ -249,6 +299,7 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail ?? `API returned ${response.status}`);
       setResult(data);
+      void loadRecentRuns();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to process meeting");
     } finally {
@@ -276,6 +327,39 @@ export default function Home() {
     URL.revokeObjectURL(url);
   }
 
+  function downloadEvidenceBundle(current: ProcessResult) {
+    downloadText(
+      `circlescribe-${current.run_id}-evidence.json`,
+      JSON.stringify({
+        run_id: current.run_id,
+        mode: current.mode,
+        extraction: current.extraction,
+        reconciliation: current.reconciliation,
+        receipts: current.receipts,
+        follow_up_actions: current.follow_up_actions,
+        audit_log: current.audit_log,
+        generated_minutes: current.generated_minutes,
+      }, null, 2),
+      "application/json"
+    );
+  }
+
+  function downloadReceipt(receipt: ProcessResult["receipts"][number]) {
+    const text = [
+      "CircleScribe receipt",
+      "",
+      `Receipt ID: ${receipt.id}`,
+      `Member: ${receipt.member_name}`,
+      `Activity: ${receipt.event_type.replaceAll("_", " ")}`,
+      `Amount: ${receipt.amount.toLocaleString()} ${receipt.currency}`,
+      `Status: ${receipt.status}`,
+      `Source event: ${receipt.event_id}`,
+      "",
+      "Generated only after deterministic reconciliation passed.",
+    ].join("\n");
+    downloadText(`${receipt.id}.txt`, text);
+  }
+
   async function resolveException(item: ExceptionItem, action: "confirm" | "discard") {
     if (!result) return;
 
@@ -301,6 +385,7 @@ export default function Home() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail ?? `API returned ${response.status}`);
       setResult(data);
+      void loadRecentRuns();
       setResolutionAmounts((current) => {
         const next = { ...current };
         delete next[item.event_id];
@@ -407,6 +492,44 @@ export default function Home() {
             <li>Resume, finalize receipts and create follow-ups</li>
           </ol>
         </aside>
+      </section>
+
+      <section className="historyPanel">
+        <div className="sectionHead">
+          <div>
+            <span className="step">Durable local state</span>
+            <h2>Recent meetings</h2>
+            <p className="muted">SQLite-backed local sessions survive backend restarts. The AWS deployment will move this state boundary to DynamoDB.</p>
+          </div>
+          <button className="ghost" onClick={loadRecentRuns} disabled={historyLoading}>
+            {historyLoading ? "Refreshing…" : "Refresh"}
+          </button>
+        </div>
+        {recentRuns.length === 0 ? (
+          <p className="muted">No saved meetings yet. Process a meeting to create the first durable run.</p>
+        ) : (
+          <div className="historyList">
+            {recentRuns.map((run) => (
+              <button
+                className="historyRow"
+                key={run.run_id}
+                onClick={() => openRecentRun(run.run_id)}
+                disabled={openingRunId === run.run_id}
+              >
+                <div>
+                  <strong>{run.meeting_summary}</strong>
+                  <small>{new Date(run.updated_at).toLocaleString()}</small>
+                </div>
+                <div className="historyMeta">
+                  <span>{run.status.replaceAll("_", " ")}</span>
+                  <span>{run.ledger_entries} ledger</span>
+                  <span>{run.review_items} review</span>
+                  <span>{run.artifacts_finalized ? "finalized" : "open"}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       {error && <section className="error">{error}</section>}
@@ -569,9 +692,16 @@ export default function Home() {
                   <span className="step">Step 6</span>
                   <h2>Completed work</h2>
                 </div>
-                <span className={result.artifacts_finalized ? "finalBadge" : "blockedBadge"}>
-                  {result.artifacts_finalized ? "finalized" : "blocked pending review"}
-                </span>
+                <div className="outputActions">
+                  <span className={result.artifacts_finalized ? "finalBadge" : "blockedBadge"}>
+                    {result.artifacts_finalized ? "finalized" : "blocked pending review"}
+                  </span>
+                  {result.artifacts_finalized && (
+                    <button className="ghost" onClick={() => downloadEvidenceBundle(result)}>
+                      Download evidence bundle
+                    </button>
+                  )}
+                </div>
               </div>
 
               {!result.artifacts_finalized ? (
@@ -591,7 +721,10 @@ export default function Home() {
                             <strong>{receipt.member_name}</strong>
                             <small>{receipt.event_type.replaceAll("_", " ")} · {receipt.id}</small>
                           </div>
-                          <strong>{receipt.amount.toLocaleString()} {receipt.currency}</strong>
+                          <div className="receiptActions">
+                            <strong>{receipt.amount.toLocaleString()} {receipt.currency}</strong>
+                            <button className="miniButton" onClick={() => downloadReceipt(receipt)}>Download</button>
+                          </div>
                         </div>
                       ))
                     )}

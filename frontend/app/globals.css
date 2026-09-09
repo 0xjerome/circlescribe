@@ -350,3 +350,58 @@ pre {
 @media (max-width: 650px) {
   .audioCaptureHead { flex-direction: column; }
 }
+
+.historyPanel {
+  margin-top: 18px;
+  padding: 22px;
+  background: white;
+  border: 1px solid #d7d7cf;
+  border-radius: 18px;
+}
+.historyPanel h2 { margin-bottom: 5px; }
+.historyPanel p { margin-top: 0; max-width: 760px; }
+.historyList { margin-top: 14px; border-top: 1px solid #e1e1da; }
+.historyRow {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid #e6e6df;
+  background: transparent;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+.historyRow:hover { background: #fafaf6; }
+.historyRow:disabled { opacity: .55; cursor: wait; }
+.historyRow strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.historyRow small { display: block; color: #77776f; margin-top: 5px; }
+.historyMeta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.historyMeta span {
+  padding: 5px 7px;
+  border: 1px solid #d0d0c8;
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.outputActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.receiptActions { display: flex; align-items: flex-end; gap: 8px; flex-direction: column; }
+.miniButton {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-decoration: underline;
+  font: inherit;
+  font-size: 11px;
+  color: #5f5f58;
+}
+
+@media (max-width: 760px) {
+  .historyRow { grid-template-columns: 1fr; }
+  .historyMeta { justify-content: flex-start; }
+  .outputActions { justify-content: flex-start; }
+}
