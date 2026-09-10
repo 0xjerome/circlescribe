@@ -88,6 +88,18 @@ const AMBIGUOUS_TRANSCRIPT = `Chair: Mary, can you confirm your contribution?
 Mary: Maybe I paid fifty thousand, I am not sure.
 Chair: We will check the receipt before recording the final amount.`;
 
+const DEMO_MEMBER_NAMES: Record<string, string> = {
+  "m-001": "Amina",
+  "m-002": "John",
+  "m-003": "Mary",
+  "m-004": "Sarah",
+};
+
+function displayMember(memberId: string | null) {
+  if (!memberId) return "Group";
+  return DEMO_MEMBER_NAMES[memberId] ?? memberId;
+}
+
 function formatAmount(value: number | null, currency: string | null) {
   if (value == null) return "—";
   return `${value.toLocaleString()} ${currency ?? "UGX"}`;
@@ -170,6 +182,7 @@ export default function Home() {
   const streamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Float32Array[]>([]);
   const audioSampleRateRef = useRef(48_000);
+  const resultRef = useRef<HTMLElement | null>(null);
 
   const acceptedTotal = useMemo(
     () => result?.reconciliation.entries.reduce((sum, entry) => sum + entry.amount, 0) ?? 0,
@@ -194,6 +207,22 @@ export default function Home() {
   useEffect(() => {
     void loadRecentRuns();
   }, []);
+
+  useEffect(() => {
+    if (!result) return;
+    const frame = requestAnimationFrame(() => {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [result?.run_id, result?.reconciliation.status]);
+
+  function loadPreset(value: string) {
+    setTranscript(value);
+    setResult(null);
+    setError("");
+    setResolutionAmounts({});
+    setAudioInfo(null);
+  }
 
   async function openRecentRun(runId: string) {
     setOpeningRunId(runId);
@@ -430,10 +459,10 @@ export default function Home() {
               <h2>Capture meeting</h2>
             </div>
             <div className="presets">
-              <button className="ghost" onClick={() => setTranscript(CLEAN_TRANSCRIPT)}>
+              <button className="ghost" onClick={() => loadPreset(CLEAN_TRANSCRIPT)}>
                 Correction demo
               </button>
-              <button className="ghost" onClick={() => setTranscript(AMBIGUOUS_TRANSCRIPT)}>
+              <button className="ghost" onClick={() => loadPreset(AMBIGUOUS_TRANSCRIPT)}>
                 Ambiguity demo
               </button>
             </div>
@@ -536,6 +565,31 @@ export default function Home() {
 
       {result && (
         <>
+          <section
+            ref={resultRef}
+            className={`outcomeBanner ${result.reconciliation.status === "needs_review" ? "outcomeReview" : ""}`}
+          >
+            <div>
+              <span className="step">Meeting outcome</span>
+              <strong>
+                {result.reconciliation.status === "reconciled"
+                  ? "Reconciled — deterministic financial checks passed"
+                  : "Human review required — financial mutation is paused"}
+              </strong>
+              <p>
+                {result.reconciliation.status === "reconciled"
+                  ? "Verified entries can now produce receipts, minutes, follow-ups and audit evidence."
+                  : "CircleScribe found genuine uncertainty and will not finalize financial outputs until a human resolves it."}
+              </p>
+            </div>
+            <div className="outcomeFacts">
+              <span><b>{result.reconciliation.entries.length}</b> ledger entries</span>
+              <span><b>{result.reconciliation.superseded_event_ids.length}</b> superseded</span>
+              <span><b>{result.reconciliation.exceptions.length}</b> review items</span>
+              <span><b>{result.follow_up_actions.length}</b> follow-ups</span>
+            </div>
+          </section>
+
           {result.resolved_event_ids.length > 0 && result.reconciliation.status === "reconciled" && (
             <section className="resumeBanner">
               <div>
@@ -586,6 +640,7 @@ export default function Home() {
                       <p>{event.source_text}</p>
                     </div>
                     <div className="eventMeta">
+                      {event.member_id && <span className="memberLabel">{displayMember(event.member_id)}</span>}
                       <span>{formatAmount(event.amount_minor, event.currency)}</span>
                       <span>{Math.round(event.confidence * 100)}% confidence</span>
                       {event.supersedes_event_id && <span>replaces {event.supersedes_event_id}</span>}
@@ -607,7 +662,7 @@ export default function Home() {
                   <div className="ledgerRow" key={entry.event_id}>
                     <div>
                       <strong>{entry.event_type.replaceAll("_", " ")}</strong>
-                      <small>{entry.member_id ?? "group"}</small>
+                      <small>{displayMember(entry.member_id)}</small>
                     </div>
                     <strong>{entry.amount.toLocaleString()} {entry.currency}</strong>
                   </div>

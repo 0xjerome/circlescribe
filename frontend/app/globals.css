@@ -405,3 +405,43 @@ pre {
   .historyMeta { justify-content: flex-start; }
   .outputActions { justify-content: flex-start; }
 }
+
+/* Milestone 10 — judge-facing demo outcome */
+.outcomeBanner {
+  scroll-margin-top: 18px;
+  margin-top: 22px;
+  padding: 22px;
+  background: #171717;
+  color: white;
+  border-radius: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+}
+.outcomeBanner .step { opacity: .7; }
+.outcomeBanner strong {
+  display: block;
+  margin-top: 6px;
+  font-size: clamp(18px, 2.2vw, 25px);
+  letter-spacing: -.025em;
+}
+.outcomeBanner p { margin: 7px 0 0; color: #d8d8d1; max-width: 720px; line-height: 1.45; }
+.outcomeReview { background: #fffaf4; color: #3b2612; border: 1px solid #b99770; }
+.outcomeReview p { color: #705638; }
+.outcomeFacts { display: grid; grid-template-columns: repeat(2, minmax(105px, 1fr)); gap: 8px; }
+.outcomeFacts span {
+  padding: 9px 11px;
+  border: 1px solid rgba(255, 255, 255, .25);
+  border-radius: 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.outcomeReview .outcomeFacts span { border-color: #cdb89e; }
+.outcomeFacts b { display: block; font-size: 18px; margin-bottom: 2px; }
+.memberLabel { color: #171717 !important; font-weight: 850; }
+
+@media (max-width: 760px) {
+  .outcomeBanner { grid-template-columns: 1fr; }
+  .outcomeFacts { grid-template-columns: repeat(2, 1fr); }
+}
